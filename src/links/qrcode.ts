@@ -2,9 +2,13 @@
  * 二维码生成 + R2 存储
  */
 
-import QRCode from 'qrcode';
+import qrcodeModule from 'qrcode';
 import type { Env } from '../types.ts';
 import { buildQrR2Key } from './shortener.ts';
+
+// CF Workers / esbuild 打包 CJS 互操作可能把 default 套一层
+// 这里兼容两种情况：QRCode.toBuffer 或 QRCode.default.toBuffer
+const QRCode: typeof qrcodeModule = (qrcodeModule as any).default ?? qrcodeModule;
 
 const QR_OPTIONS = {
   type: 'png' as const,
