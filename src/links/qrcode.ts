@@ -1,14 +1,24 @@
 /**
  * 二维码生成 + R2 存储
+ * 兼容写法：CF Workers / esbuild 处理 qrcode 包时 default 可能套一层
  */
 
-import qrcodeModule from 'qrcode';
+import * as qrcodeModuleAll from 'qrcode';
 import type { Env } from '../types.ts';
 import { buildQrR2Key } from './shortener.ts';
 
-// CF Workers / esbuild 打包 CJS 互操作可能把 default 套一层
-// 这里兼容两种情况：QRCode.toBuffer 或 QRCode.default.toBuffer
-const QRCode: typeof qrcodeModule = (qrcodeModule as any).default ?? qrcodeModule;
+// 取函数：兼容 default 套层 和 直接命名空间 两种情况
+type QrcodeApi = {
+  toBuffer: (text: string, opts: unknown) => Promise<Uint8Array> | Uint8Array;
+  toString: (text: string, opts: unknown) => Promise<string> | string;
+};
+function pickQrcode(mod: any): QrcodeApi {
+  if (mod?.toBuffer) return mod as QrcodeApi;
+  if (mod?.default?.toBuffer) return mod.default as QrcodeApi;
+  if (mod?.default?.default?.toBuffer) return mod.default.default as QrcodeApi;
+  throw new Error('qrcode 包导出结构未识别，请检查 wrangler 兼容配置');
+}
+const QRCode: QrcodeApi = pickQrcode(qrcodeModuleAll);
 
 const QR_OPTIONS = {
   type: 'png' as const,
