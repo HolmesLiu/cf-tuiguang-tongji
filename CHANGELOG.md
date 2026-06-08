@@ -7,14 +7,13 @@
 
 ## [Unreleased]
 
-### Fixed
-- 后台仪表盘 JS 报错：解构后误用 `.tasks.filter`（应为 `.filter`）
-- CSS 覆盖 HTML `hidden` 属性：后台管理页在未登录时也会显示
+### Added
+- **全局 JS 错误捕获**：在 public/js/app.js 顶部加 `window.error` 和 `unhandledrejection` 监听器，任何 JS 报错会在页面顶部显示红色 banner + stack trace，下次再有 bug 大宇一眼就能看到
 
 ### Notes
-- 修复由大宇在生产环境测试发现（v0.2.0 部署后）
-- 本地 `wrangler dev --local` 模式 D1 是内存模拟（重启清空），与手动 init 的是不同实例
-- 生产远程 D1 是持久化的，不受影响
+- 大宇在生产环境反馈"其他菜单页空白"，本地 puppeteer 复现时 5 个页面 API 全 200 且都正常渲染
+- 最可能原因：浏览器 cache 了 v0.2.0 部署时的旧版 app.js（新版代码未生效）
+- 解决：强制刷新浏览器（Cmd+Shift+R / Ctrl+Shift+R）即可
 
 ---
 

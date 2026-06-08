@@ -4,6 +4,27 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
+// ============ 全局错误展示 ============
+// 任何 JS 错误都会显示在页面顶部红色 banner，下次有 bug 一眼就能看到
+function showErrorBanner(msg, detail) {
+  let banner = document.getElementById('__error_banner__');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = '__error_banner__';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#d70015;color:white;padding:12px 20px;z-index:99999;font-family:monospace;font-size:13px;white-space:pre-wrap;word-break:break-all;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+    document.body.appendChild(banner);
+  }
+  banner.textContent = '⚠️ ' + msg + (detail ? '\n' + detail : '');
+}
+window.addEventListener('error', (e) => {
+  console.error('[error]', e.error);
+  showErrorBanner(e.message || 'JS 错误', e.error?.stack);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[unhandledrejection]', e.reason);
+  showErrorBanner('未捕获的 Promise 异常', e.reason?.message || String(e.reason));
+});
+
 const api = {
   async req(path, opts = {}) {
     const r = await fetch(path, {
