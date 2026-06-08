@@ -58,6 +58,11 @@ export function buildPromotionMarkdown(input: {
   copyGroup: string;
   copyPrivate: string;
 }): string {
+  // 不嵌图片（钉钉工作通知的 markdown ![]() 不渲染 SVG）
+  // 推广人想要二维码：点 H5 详情页查看
+  // shortUrl: https://tuiguang.7kk.top/s/ABCDEFGH
+  // h5Url:   https://tuiguang.7kk.top/h5/p/ABCDEFGH
+  const h5Url = input.shortUrl.replace(/\/s\//, '/h5/p/');
   return `### 📣 推广任务：${input.title}
 
 > **原始内容**：${input.originalContent || '（无）'}
@@ -67,12 +72,14 @@ export function buildPromotionMarkdown(input: {
 
 #### 🎯 你的专属推广链接
 
-**短链**：${input.shortUrl}
+**短链**（推荐）：${input.shortUrl}
 
-**二维码**：
-![](${input.qrUrl})
+> 👆 点开后是你要推广的原始页面
+> （点击会被本平台统计为「你的推广」）
 
-> 长按二维码可保存到相册，再去微信/朋友圈/群里发图 🚀
+**📱 推广素材（文案+二维码）**：[点这里查看](${h5Url})
+
+> 看到二维码后长按图片 → 保存到相册 → 去微信/朋友圈发送
 
 ---
 

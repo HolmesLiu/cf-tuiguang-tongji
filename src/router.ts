@@ -53,6 +53,7 @@ import {
   handleAgentSearchUsers,
   handleAgentListDepartments,
 } from './api/agent/users.ts';
+import { handleH5Landing } from './api/h5/landing.ts';
 
 type Handler = (ctx: Ctx) => Promise<Response> | Response;
 
@@ -77,9 +78,10 @@ function compileRoute(method: string, path: string, handler: Handler): Route {
 }
 
 const routes: Route[] = [
-  // ============ 短链中转 / 二维码 ============
+  // ============ 短链中转 / 二维码 / H5 详情页 ============
   compileRoute('GET', '/s/:code', (ctx) => handleShortLink(ctx.env, ctx.params.code, ctx.request)),
   compileRoute('GET', '/qr/:key', (ctx) => handleServeQr(ctx.env, ctx.params.key)),
+  compileRoute('GET', '/h5/p/:code', (ctx) => handleH5Landing(ctx.env, ctx.params.code, ctx.url.origin)),
 
   // ============ 后台认证 ============
   compileRoute('POST', '/api/admin/login', (ctx) => handleAdminLogin(ctx.env, ctx.request)),
