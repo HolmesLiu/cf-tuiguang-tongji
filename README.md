@@ -32,6 +32,16 @@
 - ✅ v0.1.0：业务对齐 + 文档 + 项目立项
 - 🚧 v0.2.0：核心代码 MVP（开发中）
 
+## 🔗 仓库
+
+- **GitHub**：https://github.com/HolmesLiu/cf-tuiguang-tongji
+- **本地**：`/Users/dayu/软件项目/cf推广统计`
+
+> 注：GitHub 仓库名不支持中文，故采用拼音 `cf-tuiguang-tongji`，description 注明项目中文名"cf推广统计"。
+
 ## 🤝 协作
 
 由 娜娜子 🌸 协助大宇开发，遵循标准 SemVer 迭代。
+- 默认分支：`main`
+- 当前版本：v0.1.0
+- 迭代流程：见 `项目进度.md` 与 `CHANGELOG.md`
