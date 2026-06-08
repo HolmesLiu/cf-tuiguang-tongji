@@ -40,8 +40,16 @@ export default {
     } catch (e) {
       console.error('worker error:', e);
       const msg = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error ? (e.stack || '').split('\n').slice(0, 5).join('\n') : '';
       return new Response(
-        JSON.stringify({ ok: false, error: { code: 'INTERNAL_ERROR', message: msg } }),
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: msg,
+            details: { stack, hint: '查看 docs/05-部署指南.md 或查看官方通讯录接口权限' }
+          }
+        }),
         { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
