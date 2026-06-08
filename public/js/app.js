@@ -340,15 +340,43 @@ async function renderUsers() {
 $('#user-search').addEventListener('input', debounce(renderUsers, 300));
 $('#sync-btn').addEventListener('click', async () => {
   const status = $('#sync-status');
-  status.textContent = '开始同步...';
+  status.textContent = '启动同步...';
   try {
-    await api.post('/api/contacts/sync');
-    status.textContent = '✅ 同步完成';
-    renderUsers();
+    const { message } = await api.post('/api/contacts/sync');
+    status.textContent = '✅ ' + message;
+    startPollingSync();
   } catch (e) {
     status.textContent = '❌ ' + e.message;
   }
 });
+
+let pollTimer = null;
+async function startPollingSync() {
+  await pollSyncOnce();
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollSyncOnce, 10000);
+}
+
+async function pollSyncOnce() {
+  const status = $('#sync-status');
+  try {
+    const { state } = await api.get('/api/contacts/sync/status');
+    if (state.status === 'done') {
+      status.textContent = `✅ 同步完成：${state.syncedDepts} 个部门，${state.syncedUsers} 个用户`;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      renderUsers();
+    } else if (state.status === 'pending') {
+      status.textContent = `🔄 同步中：${state.syncedDepts} 部门 / ${state.syncedUsers} 用户，队列剩 ${state.queueLength}`;
+    } else if (state.status === 'error') {
+      status.textContent = '❌ 同步出错：' + (state.error || '未知错误');
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    } else {
+      status.textContent = `⏸️ 空闲：点击按钮启动同步`;
+    }
+  } catch (e) {
+    status.textContent = '⚠️ 状态查询失败：' + e.message;
+  }
+}
 
 function debounce(fn, ms) {
   let t;

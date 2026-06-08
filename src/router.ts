@@ -21,6 +21,8 @@ import {
   handleListUsers,
   handleSyncContacts,
   handleSyncStatus,
+  handleSyncReset,
+  handleSyncTick,
 } from './api/admin/contacts.ts';
 import {
   handleListTasks,
@@ -95,6 +97,8 @@ const routes: Route[] = [
   compileRoute('GET', '/api/users', handleListUsers),
   compileRoute('POST', '/api/contacts/sync', handleSyncContacts),
   compileRoute('GET', '/api/contacts/sync/status', handleSyncStatus),
+  compileRoute('POST', '/api/contacts/sync/reset', handleSyncReset),
+  compileRoute('POST', '/api/contacts/sync/tick', handleSyncTick),
 
   // ============ 后台任务 ============
   compileRoute('GET', '/api/tasks', handleListTasks),

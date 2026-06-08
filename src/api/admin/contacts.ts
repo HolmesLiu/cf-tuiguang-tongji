@@ -1,15 +1,20 @@
 /**
  * 通讯录管理 API
+ *
+ * /api/contacts/sync (POST)        启动一次全量同步（清空 + 入队 + 跑首批）
+ * /api/contacts/sync/status (GET)  查同步状态（status / queue / 进度 / 错误）
+ * /api/contacts/sync/reset (POST)  重置状态（调试用）
+ *
+ * 大批量同步通过 wrangler.toml 的 cron trigger（每 5 分钟）自动推进。
  */
 
 import type { Ctx } from '../../types.ts';
 import { listDepartments, listUsers, getConfig } from '../../db/queries.ts';
-import { fail, ok, parseJson } from '../../utils/json.ts';
+import { fail, ok } from '../../utils/json.ts';
 import { requireAdmin } from '../../auth/admin.ts';
-import { syncAllContacts, getSubDepartments } from '../../dingtalk/contacts.ts';
 import { getAccessToken } from '../../dingtalk/client.ts';
-
-const KV_SYNC_PROGRESS = 'contacts:sync:progress';
+import { startSync, processNextBatch, resetSyncState } from '../../dingtalk/syncBatch.ts';
+import { getSyncState } from '../../dingtalk/syncState.ts';
 
 export async function handleListDepartments(ctx: Ctx): Promise<Response> {
   const r = await requireAdmin(ctx);
@@ -46,40 +51,26 @@ export async function handleSyncContacts(ctx: Ctx): Promise<Response> {
     return fail('VALIDATION_ERROR', '请先在「系统配置」中填写 AppKey / AppSecret', 400);
   }
 
-  // 同步 access_token 提前校验
+  // 鉴权钉钉
   try {
     await getAccessToken(ctx.env);
   } catch (e) {
     return fail('DINGTALK_API_ERROR', `钉钉鉴权失败：${e instanceof Error ? e.message : String(e)}`, 502);
   }
 
-  // 同步过程（同步阻塞，UI 显示进度）
-  const cacheProgress = async (p: unknown) => {
-    try {
-      await ctx.env.KV.put(KV_SYNC_PROGRESS, JSON.stringify(p), { expirationTtl: 600 });
-    } catch {}
-  };
-
   try {
-    const result = await syncAllContacts(ctx.env, async (p) => {
-      await cacheProgress({ status: 'running', progress: p, error: null });
+    const state = await startSync(ctx.env);
+    return ok({
+      message: '已启动全量同步。后台每 5 分钟推进一批。',
+      state: serializeState(state),
     });
-    await cacheProgress({ status: 'done', progress: null, result, error: null });
-    return ok({ result });
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
-    // CF Workers Free 计划单次最多 50 个 subrequests
-    // 企业钉钉部门/用户数大时必触发
     if (err.includes('Too many subrequests')) {
-      const hint = `钉钉同步超过 CF Workers 单次子请求数上限（Free 50 / Paid 1000）。\n` +
-        `企业部门/用户数过多导致。\n` +
-        `解决方案：1) 升级 Workers Paid Plan（\$5/月，1000 subrequests）；\n` +
-        `         2) 重构为 cron 增量同步（每批拉 10-20 个部门）。\n` +
-        `错误详情：${err}`;
-      await cacheProgress({ status: 'error', progress: null, error: hint });
+      const hint = `同步批次触发了 subrequest 上限（即使分批也可能遇到企业非常大时）。\n` +
+        `请联系大宇进一步缩减 BATCH_SIZE。错误：${err}`;
       return fail('SYNC_ERROR', hint, 500);
     }
-    await cacheProgress({ status: 'error', progress: null, error: err });
     return fail('SYNC_ERROR', err, 500);
   }
 }
@@ -87,7 +78,41 @@ export async function handleSyncContacts(ctx: Ctx): Promise<Response> {
 export async function handleSyncStatus(ctx: Ctx): Promise<Response> {
   const r = await requireAdmin(ctx);
   if (!r.ok) return r.response;
-  const v = await ctx.env.KV.get(KV_SYNC_PROGRESS);
-  if (!v) return ok({ status: 'idle' });
-  return ok(JSON.parse(v));
+  const state = await getSyncState(ctx.env);
+  return ok({ state: serializeState(state) });
+}
+
+export async function handleSyncReset(ctx: Ctx): Promise<Response> {
+  const r = await requireAdmin(ctx);
+  if (!r.ok) return r.response;
+  await resetSyncState(ctx.env);
+  return ok({ reset: true });
+}
+
+export async function handleSyncTick(ctx: Ctx): Promise<Response> {
+  // 手动推进一批（前端按钮调试用，不依赖 cron 等待）
+  const r = await requireAdmin(ctx);
+  if (!r.ok) return r.response;
+  const state = await processNextBatch(ctx.env);
+  return ok({ state: serializeState(state) });
+}
+
+/**
+ * 把 state 里的大数组剥掉（seen/queue 可能很大）
+ * 保留进度信息
+ */
+function serializeState(state: any) {
+  return {
+    status: state.status,
+    startedAt: state.startedAt,
+    finishedAt: state.finishedAt,
+    lastBatchAt: state.lastBatchAt,
+    discoveredDepts: state.discoveredDepts,
+    syncedDepts: state.syncedDepts,
+    syncedUsers: state.syncedUsers,
+    queueLength: state.queue?.length ?? 0,
+    seenLength: state.seen?.length ?? 0,
+    currentBatchDepts: state.currentBatchDepts,
+    error: state.error,
+  };
 }
