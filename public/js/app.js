@@ -49,16 +49,22 @@ const api = {
 let currentPage = 'dashboard';
 function showPage(name) {
   currentPage = name;
+  // 重建 .content 容器（如果 openTask 替换了 main）
+  const main = $('.main');
+  if (main && $$('.content').length === 0) {
+    main.innerHTML = mainBackup ?? main.innerHTML;
+  }
   $$('.content').forEach((c) => {
     const isActive = c.id === `page-${name}`;
     c.hidden = !isActive;
-    c.classList.toggle('active', isActive);   // 同时切 active 类，让 CSS .content.active 生效
+    c.classList.toggle('active', isActive);
   });
   $$('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.page === name));
-  // 触发该页的渲染
   const renderer = pageRenderers[name];
   if (renderer) renderer();
 }
+// 挂到 window，让 inline onclick（type="module" 下必须用 window 访问）能调用
+window.showPage = showPage;
 
 const pageRenderers = {
   dashboard: renderDashboard,
@@ -199,12 +205,16 @@ async function renderTasks() {
   }
 }
 
+let mainBackup = null;
+
 window.openTask = async function (id) {
   const t = await api.get('/api/tasks/' + id);
   const stats = await api.get('/api/tasks/' + id + '/stats');
   const main = $('.main');
+  // 备份原始 main（只在第一次进入详情页时备份）
+  if (mainBackup === null) mainBackup = main.innerHTML;
   main.innerHTML = `
-    <a href="#" onclick="showPage('tasks'); return false;">← 返回列表</a>
+    <a href="#" id="back-to-list-link">← 返回列表</a>
     <h1>${esc(t.task.title || '(无标题)')}</h1>
     <div class="detail-section">
       <h3>任务信息</h3>
@@ -233,6 +243,19 @@ window.openTask = async function (id) {
       </table>
     </div>
   `;
+  // 绑定返回列表按钮
+  const backLink = document.getElementById('back-to-list-link');
+  if (backLink) {
+    backLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      const main = $('.main');
+      if (mainBackup !== null) {
+        main.innerHTML = mainBackup;
+        mainBackup = null;
+      }
+      showPage('tasks');
+    });
+  }
 };
 
 function renderStatsSection(s) {
