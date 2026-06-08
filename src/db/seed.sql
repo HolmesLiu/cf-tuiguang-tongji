@@ -1,0 +1,11 @@
+-- =====================================================
+-- 初始数据：默认管理员
+-- 用户名：admin
+-- 密码：admin123
+-- ⚠️ 首次部署后必须修改！
+-- =====================================================
+
+-- 哈希值由 hashPassword('admin123', 100000) 生成
+-- 这里用占位符，实际生成见 scripts/init-admin.ts 或 wrangler 命令
+-- INSERT INTO admins (username, password_hash, created_at)
+-- VALUES ('admin', 'pbkdf2$100000$...', unixepoch() * 1000);

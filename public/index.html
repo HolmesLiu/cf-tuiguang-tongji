@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cf推广统计 - 后台管理</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- 登录页 -->
+  <div id="login-page" class="page">
+    <div class="login-card">
+      <h1>🌸 cf推广统计</h1>
+      <p class="subtitle">后台管理登录</p>
+      <form id="login-form">
+        <input type="text" id="username" placeholder="用户名" autocomplete="username" required>
+        <input type="password" id="password" placeholder="密码" autocomplete="current-password" required>
+        <button type="submit" id="login-btn">登录</button>
+      </form>
+      <div id="login-error" class="error-msg" hidden></div>
+    </div>
+  </div>
+
+  <!-- 后台主体 -->
+  <div id="app-page" class="page" hidden>
+    <aside class="sidebar">
+      <div class="brand">
+        <h2>🌸 cf推广统计</h2>
+      </div>
+      <nav>
+        <a class="nav-item active" data-page="dashboard">📊 仪表盘</a>
+        <a class="nav-item" data-page="tasks">📋 任务</a>
+        <a class="nav-item" data-page="new-task">➕ 新建任务</a>
+        <a class="nav-item" data-page="users">👥 推广人</a>
+        <a class="nav-item" data-page="archive">🗄️ 归档</a>
+        <a class="nav-item" data-page="api-keys">🔑 API Key</a>
+        <a class="nav-item" data-page="settings">⚙️ 设置</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="user-info"></div>
+        <button id="logout-btn" class="btn-link">登出</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div id="page-dashboard" class="content active">
+        <h1>📊 仪表盘</h1>
+        <div id="dashboard-stats" class="stat-grid">加载中...</div>
+      </div>
+      <div id="page-tasks" class="content" hidden>
+        <h1>📋 任务列表</h1>
+        <div id="tasks-list">加载中...</div>
+      </div>
+      <div id="page-new-task" class="content" hidden>
+        <h1>➕ 新建任务</h1>
+        <form id="new-task-form" class="form">
+          <label>任务标题
+            <input type="text" name="title" placeholder="（可选）给任务起个名字">
+          </label>
+          <label>原始链接 *
+            <input type="url" name="original_url" required placeholder="https://...">
+          </label>
+          <label>原内容
+            <textarea name="original_content" rows="3" placeholder="要推广的原始内容（可留空）"></textarea>
+          </label>
+          <label>消息类型
+            <select name="message_type">
+              <option value="work_notification">工作通知</option>
+              <option value="todo">个人待办</option>
+            </select>
+          </label>
+
+          <fieldset>
+            <legend>推广文案（* 由 agent 润色后填入）</legend>
+            <label>朋友圈版 *
+              <textarea name="polished_friend_circle" rows="4" required></textarea>
+            </label>
+            <label>群发版 *
+              <textarea name="polished_group" rows="4" required></textarea>
+            </label>
+            <label>私聊版 *
+              <textarea name="polished_private" rows="4" required></textarea>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>接收方</legend>
+            <label>指定推广人 userid（逗号分隔，可选）
+              <input type="text" name="users" placeholder="zhangsan,lisi">
+            </label>
+            <label>指定事业部 dept_id（逗号分隔，可选）
+              <input type="text" name="departments" placeholder="1,2">
+            </label>
+            <p class="hint">至少填一个</p>
+          </fieldset>
+
+          <button type="submit" class="btn-primary">保存为草稿</button>
+          <div id="new-task-result" class="error-msg" hidden></div>
+        </form>
+      </div>
+      <div id="page-users" class="content" hidden>
+        <h1>👥 推广人</h1>
+        <div class="toolbar">
+          <input type="text" id="user-search" placeholder="搜索姓名/userid/手机">
+          <button id="sync-btn" class="btn-secondary">同步通讯录</button>
+        </div>
+        <div id="sync-status" class="hint"></div>
+        <div id="users-list">加载中...</div>
+      </div>
+      <div id="page-archive" class="content" hidden>
+        <h1>🗄️ 归档（回收站）</h1>
+        <div id="archive-list">加载中...</div>
+      </div>
+      <div id="page-api-keys" class="content" hidden>
+        <h1>🔑 API Key</h1>
+        <div class="toolbar">
+          <input type="text" id="api-key-name" placeholder="名称（如：agent-001）">
+          <button id="create-key-btn" class="btn-secondary">创建</button>
+        </div>
+        <div id="new-key-display" class="new-key-box" hidden></div>
+        <div id="api-keys-list">加载中...</div>
+      </div>
+      <div id="page-settings" class="content" hidden>
+        <h1>⚙️ 系统配置</h1>
+        <form id="config-form" class="form">
+          <label>钉钉 Corp ID
+            <input type="text" name="dingtalk_corp_id">
+          </label>
+          <label>钉钉 AppKey
+            <input type="text" name="dingtalk_app_key">
+          </label>
+          <label>钉钉 AppSecret
+            <input type="password" name="dingtalk_app_secret" placeholder="留空表示不修改">
+          </label>
+          <label>钉钉 AgentId
+            <input type="text" name="dingtalk_agent_id">
+          </label>
+          <label>默认消息类型
+            <select name="default_message_type">
+              <option value="work_notification">工作通知</option>
+              <option value="todo">个人待办</option>
+            </select>
+          </label>
+          <button type="submit" class="btn-primary">保存</button>
+          <div id="config-result" class="hint"></div>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/app.js" type="module"></script>
+</body>
+</html>

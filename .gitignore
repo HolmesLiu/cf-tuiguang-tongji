@@ -33,3 +33,7 @@ Thumbs.db
 .mf/
 .wrangler/
 .dev.vars
+.dev.vars.*
+
+# typescript
+*.tsbuildinfo
