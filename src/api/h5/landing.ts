@@ -52,6 +52,17 @@ const HTML_FOOT = `
       if (img) {
         img.addEventListener('contextmenu', function(e) { e.preventDefault(); });
       }
+
+      // OAuth 按钮：点一下 → 跳转到钉钉授权页
+      const oauthBtn = document.getElementById('oauth-btn');
+      if (oauthBtn) {
+        oauthBtn.addEventListener('click', function() {
+          const userid = oauthBtn.getAttribute('data-userid');
+          if (!userid) return;
+          // 用 window.location 触发 302 跳转（handleOAuthAuthorize 返回 302）
+          window.location.href = '/api/oauth/authorize?userid=' + encodeURIComponent(userid);
+        });
+      }
     });
   </script>
 </body>
