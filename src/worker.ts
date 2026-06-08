@@ -1,13 +1,12 @@
 /**
  * Worker 入口
  * - HTTP fetch handler
- * - Scheduled handler（cron 推进通讯录分批同步）
+ * - 纯手动同步模式（v0.2.1 调整）：点一次按钮，平台内部连推直到完成或超时
  */
 
 import type { Env } from './types.ts';
 import { route } from './router.ts';
 import { ensureDefaultAdmin } from '../scripts/init-admin.ts';
-import { processNextBatch } from './dingtalk/syncBatch.ts';
 
 export default {
   async fetch(req: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
@@ -52,22 +51,5 @@ export default {
         { status: 500, headers: { 'content-type': 'application/json' } }
       );
     }
-  },
-
-  /**
-   * Cron 触发（每 5 分钟）
-   * 推进通讯录分批同步
-   */
-  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(
-      (async () => {
-        try {
-          console.log(`[cron] tick at ${new Date(event.scheduledTime).toISOString()}`);
-          await processNextBatch(env);
-        } catch (e) {
-          console.error('[cron] sync batch failed:', e);
-        }
-      })()
-    );
   },
 } satisfies ExportedHandler<Env>;

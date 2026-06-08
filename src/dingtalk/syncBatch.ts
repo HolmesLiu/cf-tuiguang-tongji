@@ -210,6 +210,30 @@ export async function resetSyncState(env: Env): Promise<void> {
   await env.KV.delete('contacts:sync:state');
 }
 
+// ==================== 连推：单次 invocation 内跑尽量多批 ====================
+
+/**
+ * 循环跑批直到完成 / 出错 / 超时
+ * 用于纯手动同步模式：一次 /api/contacts/sync 请求能推进尽可能多批
+ * （多批之后受 CF Worker wall time 30s 限制）
+ */
+export async function runUntilDoneOrTimeout(env: Env, maxWallMs = 25_000): Promise<SyncState> {
+  const t0 = Date.now();
+  let state = await getSyncState(env);
+  if (state.status !== 'pending') return state;
+  let batches = 0;
+  while (state.status === 'pending') {
+    if (Date.now() - t0 > maxWallMs) {
+      console.log(`[sync] reached wall-time limit ${maxWallMs}ms, batches=${batches}`);
+      break;
+    }
+    state = await processNextBatch(env);
+    if (state.status === 'error') break;
+    batches++;
+  }
+  return state;
+}
+
 // ==================== 辅助 ====================
 
 function buildPathFromMap(

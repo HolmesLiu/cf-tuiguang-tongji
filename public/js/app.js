@@ -342,41 +342,32 @@ $('#sync-btn').addEventListener('click', async () => {
   const status = $('#sync-status');
   status.textContent = '启动同步...';
   try {
-    const { message } = await api.post('/api/contacts/sync');
-    status.textContent = '✅ ' + message;
-    startPollingSync();
+    // while 循环：反复调后端 /api/contacts/sync
+    // 后端单次调用会跑尽可能多批（受 25s wall time 限制）
+    // 调一次拿到最新 state；pending 就再调（前端排队，CF Worker 串行处理）
+    let state = null;
+    let rounds = 0;
+    while (true) {
+      const r = await api.post('/api/contacts/sync');
+      state = r.state;
+      rounds++;
+      status.textContent = `🔄 第 ${rounds} 轮：${state.syncedDepts} 部门 / ${state.syncedUsers} 用户，队列剩 ${state.queueLength}`;
+      if (state.status === 'done') {
+        status.textContent = `✅ 同步完成：${state.syncedDepts} 部门，${state.syncedUsers} 用户（共 ${rounds} 轮）`;
+        renderUsers();
+        break;
+      }
+      if (state.status === 'error') {
+        status.textContent = '❌ 同步出错：' + (state.error || '未知错误');
+        break;
+      }
+      // pending 状态：后端在单次 invocation 跑了多批，但还没完成
+      // 继续触发（后端会接着推进）
+    }
   } catch (e) {
     status.textContent = '❌ ' + e.message;
   }
 });
-
-let pollTimer = null;
-async function startPollingSync() {
-  await pollSyncOnce();
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(pollSyncOnce, 10000);
-}
-
-async function pollSyncOnce() {
-  const status = $('#sync-status');
-  try {
-    const { state } = await api.get('/api/contacts/sync/status');
-    if (state.status === 'done') {
-      status.textContent = `✅ 同步完成：${state.syncedDepts} 个部门，${state.syncedUsers} 个用户`;
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      renderUsers();
-    } else if (state.status === 'pending') {
-      status.textContent = `🔄 同步中：${state.syncedDepts} 部门 / ${state.syncedUsers} 用户，队列剩 ${state.queueLength}`;
-    } else if (state.status === 'error') {
-      status.textContent = '❌ 同步出错：' + (state.error || '未知错误');
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    } else {
-      status.textContent = `⏸️ 空闲：点击按钮启动同步`;
-    }
-  } catch (e) {
-    status.textContent = '⚠️ 状态查询失败：' + e.message;
-  }
-}
 
 function debounce(fn, ms) {
   let t;

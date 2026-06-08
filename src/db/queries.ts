@@ -133,8 +133,9 @@ export async function listDepartments(db: D1Database): Promise<DingtalkDepartmen
 export async function bulkInsertDepartments(db: D1Database, depts: Omit<DingtalkDepartment, 'synced_at'>[]): Promise<void> {
   if (depts.length === 0) return;
   const synced_at = Date.now();
-  // 批量插入，每批 50 条
-  const BATCH = 50;
+  // 批量插入，每批 10 条
+  // D1 单 SQL 最多 100 个变量，departments 表 5 字段，10 × 5 = 50 < 100
+  const BATCH = 10;
   for (let i = 0; i < depts.length; i += BATCH) {
     const batch = depts.slice(i, i + BATCH);
     const placeholders = batch.map(() => '(?, ?, ?, ?, ?)').join(', ');
@@ -207,7 +208,9 @@ export async function getUsersByDept(db: D1Database, deptId: number, includeSubD
 export async function bulkInsertUsers(db: D1Database, users: Omit<DingtalkUser, 'synced_at'>[]): Promise<void> {
   if (users.length === 0) return;
   const synced_at = Date.now();
-  const BATCH = 50;
+  // 批量插入，每批 10 条
+  // D1 单 SQL 最多 100 个变量，users 表 9 字段，10 × 9 = 90 < 100
+  const BATCH = 10;
   for (let i = 0; i < users.length; i += BATCH) {
     const batch = users.slice(i, i + BATCH);
     const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
