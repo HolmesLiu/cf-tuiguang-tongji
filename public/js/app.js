@@ -100,19 +100,20 @@ async function renderDashboard() {
   const el = $('#dashboard-stats');
   el.innerHTML = '加载中...';
   try {
-    const { tasks, total } = await api.get('/api/tasks?page=1&page_size=5');
-    const { tasks: allTasks } = await api.get('/api/tasks?page=1&page_size=1000');
-    const published = allTasks.tasks.filter(t => t.status === 'published').length;
+    const { tasks: allTasks, total } = await api.get('/api/tasks?page=1&page_size=1000');
+    const recent = allTasks.slice(0, 5);
+    const published = allTasks.filter(t => t.status === 'published').length;
+    const draft = allTasks.filter(t => t.status === 'draft').length;
     el.innerHTML = `
       <div class="stat-card"><div class="label">总任务数</div><div class="value">${total}</div></div>
       <div class="stat-card"><div class="label">已发布</div><div class="value">${published}</div></div>
-      <div class="stat-card"><div class="label">草稿</div><div class="value">${total - published}</div></div>
+      <div class="stat-card"><div class="label">草稿</div><div class="value">${draft}</div></div>
       <div class="stat-card"><div class="label">今日活跃</div><div class="value">-</div></div>
       <div class="detail-section" style="grid-column: 1 / -1;">
         <h3>最近任务</h3>
         <table>
           <thead><tr><th>标题</th><th>状态</th><th>原链接</th><th>创建时间</th><th>操作</th></tr></thead>
-          <tbody>${tasks.map(taskRow).join('')}</tbody>
+          <tbody>${recent.map(taskRow).join('') || '<tr><td colspan="5" style="text-align:center;color:#86868b;">暂无任务</td></tr>'}</tbody>
         </table>
       </div>
     `;

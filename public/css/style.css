@@ -14,6 +14,9 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
 a { color: #0066cc; text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* hidden 属性优先级兜底：避免被用户样式覆盖 */
+[hidden] { display: none !important; }
+
 /* ============ 登录页 ============ */
 .page#login-page {
   min-height: 100vh;
