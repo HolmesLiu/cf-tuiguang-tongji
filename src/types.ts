@@ -168,17 +168,14 @@ export interface DingtalkAccessTokenResponse {
 export interface DingtalkDeptListResponse {
   errcode: number;
   errmsg: string;
-  result: {
-    has_more: boolean;
-    next_cursor: number;
+  result: Array<{
     dept_id: number;
-    list: Array<{
-      dept_id: number;
-      name: string;
-      parent_id: number;
-      create_dept_group: boolean;
-    }>;
-  };
+    name: string;
+    parent_id: number;
+    create_dept_group: boolean;
+    auto_add_user: boolean;
+  }>;
+  request_id?: string;
 }
 
 export interface DingtalkUserListResponse {

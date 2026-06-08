@@ -1,12 +1,13 @@
 /**
  * 钉钉通讯录同步
  * - 全量同步（每次都重建，保证无重复）
- * - 分批拉取（单次最多 100 条）
- * - 部门树先建，再按部门拉用户
+ * - 部门递归：先根部门 listsub 拿子部门 ID，再递归
+ * - 每个部门 listsub 拿完整子部门信息
+ * - 每个部门 listsub 拉该部门下用户
  */
 
 import type { Env, DingtalkDeptListResponse, DingtalkUserListResponse, DingtalkDepartment, DingtalkUser } from '../types.ts';
-import { dtGet } from './client.ts';
+import { dtGet, dtPost } from './client.ts';
 import { bulkInsertDepartments, bulkInsertUsers, clearDepartments, clearUsers, listDepartments } from '../db/queries.ts';
 
 const PAGE_SIZE = 100;
@@ -62,6 +63,7 @@ export async function syncAllContacts(env: Env, onProgress?: (p: SyncProgress) =
 
 /**
  * 递归拉所有部门
+ * 钉钉 /topapi/v2/department/listsub 返回的 result 是数组（不分页）
  */
 async function fetchAllDepartments(env: Env, onProgress?: (p: SyncProgress) => void): Promise<DingtalkDepartment[]> {
   const result: DingtalkDepartment[] = [];
@@ -70,32 +72,31 @@ async function fetchAllDepartments(env: Env, onProgress?: (p: SyncProgress) => v
 
   while (queue.length > 0) {
     const deptId = queue.shift()!;
-    let cursor = 0;
-    do {
-      const data = await dtGet<DingtalkDeptListResponse>(env, '/topapi/v2/department/listsub', {
-        dept_id: deptId,
-        cursor,
-        size: PAGE_SIZE,
-      });
-      if (data.errcode !== 0) {
-        throw new Error(`拉取部门失败: ${data.errmsg} (dept_id=${deptId}, errcode=${data.errcode})`);
+    // listsub 是 POST 接口，body 传 dept_id
+    const data = await dtPost<DingtalkDeptListResponse>(env, '/topapi/v2/department/listsub', {
+      dept_id: deptId,
+      language: 'zh_CN',
+    });
+    if (data.errcode !== 0) {
+      throw new Error(`拉取部门失败: ${data.errmsg} (dept_id=${deptId}, errcode=${data.errcode})`);
+    }
+    if (!Array.isArray(data.result)) {
+      throw new Error(`钉钉返回 result 不是数组: ${JSON.stringify(data).slice(0, 200)}`);
+    }
+    for (const d of data.result) {
+      if (!seen.has(d.dept_id)) {
+        seen.add(d.dept_id);
+        result.push({
+          dept_id: d.dept_id,
+          name: d.name,
+          parent_id: d.parent_id || null,
+          path: d.name, // 后面 buildDeptPaths 重建
+          synced_at: 0,
+        });
+        queue.push(d.dept_id);
       }
-      for (const d of data.result.list) {
-        if (!seen.has(d.dept_id)) {
-          seen.add(d.dept_id);
-          result.push({
-            dept_id: d.dept_id,
-            name: d.name,
-            parent_id: d.parent_id || null,
-            path: d.name, // 后面 buildDeptPaths 重建
-            synced_at: 0,
-          });
-          queue.push(d.dept_id);
-        }
-      }
-      cursor = data.result.has_more ? data.result.next_cursor : -1;
-      onProgress?.({ phase: 'departments', current: result.length, total: result.length, message: `已拉 ${result.length} 个部门` });
-    } while (cursor >= 0);
+    }
+    onProgress?.({ phase: 'departments', current: result.length, total: result.length, message: `已拉 ${result.length} 个部门` });
   }
 
   return result;
@@ -117,14 +118,20 @@ async function fetchAllUsers(
     const dept = depts[i];
     let cursor = 0;
     do {
-      const data = await dtGet<DingtalkUserListResponse>(env, '/topapi/v2/user/listsub', {
+      // 钉钉 /topapi/v2/user/list 是 POST 接口，body 传 dept_id / cursor / size
+      const data = await dtPost<DingtalkUserListResponse>(env, '/topapi/v2/user/list', {
         dept_id: dept.dept_id,
         cursor,
         size: PAGE_SIZE,
+        language: 'zh_CN',
       });
       if (data.errcode !== 0) {
         // 单个部门失败不阻塞，记录后继续
         console.error(`拉取用户失败 dept=${dept.dept_id}: ${data.errmsg}`);
+        break;
+      }
+      if (!Array.isArray(data.result?.list)) {
+        console.error(`拉取用户结果 list 不是数组 dept=${dept.dept_id}: ${JSON.stringify(data).slice(0, 200)}`);
         break;
       }
       for (const u of data.result.list) {
