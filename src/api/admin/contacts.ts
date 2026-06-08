@@ -68,6 +68,17 @@ export async function handleSyncContacts(ctx: Ctx): Promise<Response> {
     return ok({ result });
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
+    // CF Workers Free 计划单次最多 50 个 subrequests
+    // 企业钉钉部门/用户数大时必触发
+    if (err.includes('Too many subrequests')) {
+      const hint = `钉钉同步超过 CF Workers 单次子请求数上限（Free 50 / Paid 1000）。\n` +
+        `企业部门/用户数过多导致。\n` +
+        `解决方案：1) 升级 Workers Paid Plan（\$5/月，1000 subrequests）；\n` +
+        `         2) 重构为 cron 增量同步（每批拉 10-20 个部门）。\n` +
+        `错误详情：${err}`;
+      await cacheProgress({ status: 'error', progress: null, error: hint });
+      return fail('SYNC_ERROR', hint, 500);
+    }
     await cacheProgress({ status: 'error', progress: null, error: err });
     return fail('SYNC_ERROR', err, 500);
   }
