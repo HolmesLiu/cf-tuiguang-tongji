@@ -47,6 +47,7 @@ export const INITIAL_STATE: SyncState = {
   queue: [],
   seen: [],
   deptCache: [],
+  discoveredDepts: 0,
   syncedDepts: 0,
   syncedUsers: 0,
   currentBatchDepts: [],
