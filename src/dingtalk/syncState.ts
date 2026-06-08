@@ -8,7 +8,7 @@
 import type { Env, DingtalkDepartment, DingtalkUser } from '../types.ts';
 
 const KV_KEY = 'contacts:sync:state';
-const BATCH_SIZE = 5;                    // 每批处理的部门数（控制 subrequest）
+const BATCH_SIZE = 3;                    // 每批处理 3 个部门
 const MAX_SUBREQUESTS_PER_BATCH = 30;     // 单批硬上限，留 20 给其他
 
 export type SyncStatus = 'idle' | 'pending' | 'done' | 'error';
