@@ -88,6 +88,7 @@ const routes: Route[] = [
   compileRoute('GET', '/qr/:key', (ctx) => handleServeQr(ctx.env, ctx.params.key)),
   compileRoute('GET', '/h5/p/:code', (ctx) => handleH5Landing(ctx.env, ctx.params.code, ctx.url.origin)),
   compileRoute('POST', '/api/oauth/authorize', handleOAuthAuthorize),
+  compileRoute('GET', '/api/oauth/authorize', handleOAuthAuthorize),
   compileRoute('GET', '/api/oauth/callback', handleOAuthCallback),
   compileRoute('GET', '/api/oauth/status', handleOAuthStatus),
 
