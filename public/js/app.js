@@ -49,7 +49,11 @@ const api = {
 let currentPage = 'dashboard';
 function showPage(name) {
   currentPage = name;
-  $$('.content').forEach((c) => c.hidden = c.id !== `page-${name}`);
+  $$('.content').forEach((c) => {
+    const isActive = c.id === `page-${name}`;
+    c.hidden = !isActive;
+    c.classList.toggle('active', isActive);   // 同时切 active 类，让 CSS .content.active 生效
+  });
   $$('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.page === name));
   // 触发该页的渲染
   const renderer = pageRenderers[name];
