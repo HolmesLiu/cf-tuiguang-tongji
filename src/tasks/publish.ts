@@ -89,14 +89,13 @@ export async function publishTask(env: Env, taskId: string): Promise<PublishResu
     if (!shortCode) throw new Error('短码生成失败（重试 5 次都冲突）');
 
     const shortUrl = buildShortUrl(env.SHORT_URL_BASE, shortCode);
-    const qrUrl = buildQrPublicUrl(env.SHORT_URL_BASE, buildQrR2Key(shortCode));
+    // 生成二维码并存 R2（返回 .svg 路径）
+    const r2Key = await generateAndStoreQr(env, shortUrl, shortCode);
+    const qrUrl = buildQrPublicUrl(env.SHORT_URL_BASE, r2Key);
 
     // 默认用朋友圈版（最常见）
     const copyType: CopyType = 'friend_circle';
     const copyUsed = polished[copyType] ?? polished.group ?? polished.private;
-
-    // 生成二维码并存 R2
-    const r2Key = await generateAndStoreQr(env, shortUrl, shortCode);
 
     const target = await createTarget(env.DB, {
       task_id: taskId,

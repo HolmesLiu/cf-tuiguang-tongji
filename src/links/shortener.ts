@@ -32,5 +32,6 @@ export function buildShortUrl(base: string, code: string): string {
  */
 export function buildQrR2Key(shortCode: string): string {
   // 简单分片：前 2 位作为目录，避免单目录过多
-  return `qr/${shortCode.slice(0, 2)}/${shortCode}.png`;
+  // 扩展名 .svg（qrcode-svg 输出的格式）
+  return `qr/${shortCode.slice(0, 2)}/${shortCode}.svg`;
 }
