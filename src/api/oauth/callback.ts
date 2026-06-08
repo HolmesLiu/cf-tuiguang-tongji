@@ -74,11 +74,11 @@ export async function handleOAuthCallback(ctx: Ctx): Promise<Response> {
     await upsertUserToken(ctx.env.DB, {
       userid: state,
       access_token: tokenRes.accessToken,
-      refresh_token: tokenRes.refreshToken,
+      refresh_token: tokenRes.refreshToken ?? null,
       expires_at: expiresAt,
       refresh_expires_at: refreshExpiresAt,
-      scope: tokenRes.scope,
-      union_id: tokenRes.unionId,
+      scope: tokenRes.scope ?? null,
+      union_id: tokenRes.unionId ?? null,
     });
 
     // 跳回 H5 详情页（带 success=1）
