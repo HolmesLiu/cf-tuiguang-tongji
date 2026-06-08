@@ -133,17 +133,20 @@ export async function listDepartments(db: D1Database): Promise<DingtalkDepartmen
 export async function bulkInsertDepartments(db: D1Database, depts: Omit<DingtalkDepartment, 'synced_at'>[]): Promise<void> {
   if (depts.length === 0) return;
   const synced_at = Date.now();
-  // 批量插入，每批 10 条
-  // D1 单 SQL 最多 100 个变量，departments 表 5 字段，10 × 5 = 50 < 100
+  // 用 db.batch 合并所有 INSERT 为 1 个 subrequest（CF D1 batch API 特性）
+  // 每条 SQL 内部：10 行 × 5 字段 = 50 个变量 < 100
   const BATCH = 10;
+  const statements: D1PreparedStatement[] = [];
   for (let i = 0; i < depts.length; i += BATCH) {
     const batch = depts.slice(i, i + BATCH);
     const placeholders = batch.map(() => '(?, ?, ?, ?, ?)').join(', ');
     const values = batch.flatMap((d) => [d.dept_id, d.name, d.parent_id, d.path, synced_at]);
-    await db.prepare(`INSERT OR REPLACE INTO departments (dept_id, name, parent_id, path, synced_at) VALUES ${placeholders}`)
-      .bind(...values as never[])
-      .run();
+    statements.push(
+      db.prepare(`INSERT OR REPLACE INTO departments (dept_id, name, parent_id, path, synced_at) VALUES ${placeholders}`)
+        .bind(...values as never[])
+    );
   }
+  await db.batch(statements);  // 1 个 subrequest 提交所有 statements
 }
 
 export async function clearDepartments(db: D1Database): Promise<void> {
@@ -208,20 +211,24 @@ export async function getUsersByDept(db: D1Database, deptId: number, includeSubD
 export async function bulkInsertUsers(db: D1Database, users: Omit<DingtalkUser, 'synced_at'>[]): Promise<void> {
   if (users.length === 0) return;
   const synced_at = Date.now();
-  // 批量插入，每批 10 条
-  // D1 单 SQL 最多 100 个变量，users 表 9 字段，10 × 9 = 90 < 100
-  const BATCH = 10;
+  // 用 db.batch 合并所有 INSERT 为 1 个 subrequest
+  // 每条 SQL 内部：11 行 × 9 字段 = 99 < 100
+  const BATCH = 11;
+  const statements: D1PreparedStatement[] = [];
   for (let i = 0; i < users.length; i += BATCH) {
     const batch = users.slice(i, i + BATCH);
     const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
     const values = batch.flatMap((u) => [
       u.userid, u.name, u.mobile, u.avatar, u.dept_id, u.dept_path, u.title, u.is_active, synced_at,
     ]);
-    await db.prepare(
-      `INSERT OR REPLACE INTO users (userid, name, mobile, avatar, dept_id, dept_path, title, is_active, synced_at)
-       VALUES ${placeholders}`
-    ).bind(...values as never[]).run();
+    statements.push(
+      db.prepare(
+        `INSERT OR REPLACE INTO users (userid, name, mobile, avatar, dept_id, dept_path, title, is_active, synced_at)
+         VALUES ${placeholders}`
+      ).bind(...values as never[])
+    );
   }
+  await db.batch(statements);  // 1 个 subrequest
 }
 
 export async function clearUsers(db: D1Database): Promise<void> {
