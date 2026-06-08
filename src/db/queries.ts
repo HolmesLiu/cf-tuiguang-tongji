@@ -102,14 +102,16 @@ export async function updateConfig(
       values.push(v);
     }
   }
+  // updated_at 必带
   fields.push('updated_at = ?');
   values.push(Date.now());
   // 写配置时清空 access_token（强制下次重新拉）
   fields.push('dingtalk_access_token = NULL');
   fields.push('dingtalk_token_expires = NULL');
+  // WHERE 用参数化
   values.push(1);
   await db
-    .prepare(`UPDATE config SET ${fields.join(', ')} WHERE id = 1`)
+    .prepare(`UPDATE config SET ${fields.join(', ')} WHERE id = ?`)
     .bind(...values as never[])
     .run();
 }
