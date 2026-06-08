@@ -601,3 +601,39 @@ export async function touchApiKey(db: D1Database, id: number): Promise<void> {
 export async function revokeApiKey(db: D1Database, id: number): Promise<void> {
   await db.prepare('UPDATE api_keys SET is_active = 0 WHERE id = ?').bind(id).run();
 }
+
+// ============ User Tokens (OAuth) ============
+
+export interface UserToken {
+  userid: string;
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  refresh_expires_at: number | null;
+  scope: string | null;
+  union_id: string | null;
+  updated_at: number;
+}
+
+export async function getUserToken(db: D1Database, userid: string): Promise<UserToken | null> {
+  return db.prepare('SELECT * FROM user_tokens WHERE userid = ?').bind(userid).first<UserToken>();
+}
+
+export async function upsertUserToken(
+  db: D1Database,
+  t: Omit<UserToken, 'updated_at'>
+): Promise<void> {
+  await db
+    .prepare(`INSERT OR REPLACE INTO user_tokens
+      (userid, access_token, refresh_token, expires_at, refresh_expires_at, scope, union_id, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      t.userid, t.access_token, t.refresh_token, t.expires_at,
+      t.refresh_expires_at, t.scope, t.union_id, Date.now()
+    )
+    .run();
+}
+
+export async function deleteUserToken(db: D1Database, userid: string): Promise<void> {
+  await db.prepare('DELETE FROM user_tokens WHERE userid = ?').bind(userid).run();
+}

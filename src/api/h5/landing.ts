@@ -5,7 +5,7 @@
  */
 
 import type { Env } from '../../types.ts';
-import { getTargetByCode, getTask } from '../../db/queries.ts';
+import { getTargetByCode, getTask, getUserToken } from '../../db/queries.ts';
 import { safeJson } from '../../utils/json.ts';
 
 const HTML_HEAD = `<!DOCTYPE html>
@@ -33,6 +33,11 @@ const HTML_HEAD = `<!DOCTYPE html>
     .btn-secondary { background: #f5f5f7; color: #0066cc; border: 1px solid #d2d2d7; margin-top: 8px; }
     .short-url { background: #fbfbfd; padding: 8px 12px; border-radius: 6px; font-size: 12px; word-break: break-all; color: #0066cc; font-family: "SF Mono", Menlo, monospace; }
     .stats { text-align: center; color: #86868b; font-size: 12px; margin-top: 24px; }
+    .oauth-status { padding: 10px 12px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+    .oauth-status.authorized { background: #d1f4e0; color: #00875a; }
+    .oauth-hint { color: #86868b; font-size: 11px; margin-top: 6px; }
+    .oauth-banner { position: fixed; top: 0; left: 0; right: 0; background: #00875a; color: white; padding: 12px; text-align: center; z-index: 1000; font-size: 14px; }
+    .oauth-banner.error { background: #d70015; }
   </style>
 </head>
 <body>
@@ -75,6 +80,14 @@ export async function handleH5Landing(env: Env, code: string, origin: string): P
   const qrImgUrl = target.qr_r2_key ? `${origin}/qr/${target.qr_r2_key}` : '';
   const originUrl = task.original_url;
 
+  // 查推广人 OAuth 授权状态
+  const token = await getUserToken(env.DB, target.userid);
+  const oauthAuthorized = !!token;
+  const oauthBlock = oauthAuthorized
+    ? `<div class="oauth-status authorized">✅ 已开启待办通知（你将收到钉钉待办）</div>`
+    : `<button class="btn btn-secondary" id="oauth-btn" data-userid="${escAttr(target.userid)}" data-code="${escAttr(code)}">📌 开启钉钉待办通知（可选）</button>
+       <p class="oauth-hint">开启后任务会以"个人待办"形式发到你钉钉，关闭则发"工作通知"。</p>`;
+
   const html = `${HTML_HEAD}
     <div class="card">
       <h1>📣 ${escapeHtml(task.title || '推广任务')}</h1>
@@ -92,6 +105,7 @@ export async function handleH5Landing(env: Env, code: string, origin: string): P
 
       <a href="${escapeHtml(originUrl)}" class="btn" target="_blank" rel="noopener">🚀 打开原始推广页</a>
       <button class="btn btn-secondary" onclick="navigator.clipboard?.writeText('${escapeHtml(target.short_url || '')}')">📋 复制推广链接</button>
+      ${oauthBlock}
     </div>
 
     ${primaryCopy ? `
@@ -124,4 +138,9 @@ function escapeHtml(s: string): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]!));
+}
+
+// HTML 属性里用，额外转义空格和等号
+function escAttr(s: string): string {
+  return escapeHtml(s).replace(/\s/g, '');
 }

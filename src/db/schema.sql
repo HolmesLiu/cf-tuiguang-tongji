@@ -149,6 +149,22 @@ CREATE INDEX IF NOT EXISTS idx_sess_admin ON admin_sessions(admin_id);
 CREATE INDEX IF NOT EXISTS idx_sess_expires ON admin_sessions(expires_at);
 
 -- =====================================================
+-- 11. 推广人 User Access Token（OAuth 授权后存储）
+-- 用于调用钉钉新版个人待办 API
+-- =====================================================
+CREATE TABLE IF NOT EXISTS user_tokens (
+  userid        TEXT    PRIMARY KEY,
+  access_token  TEXT    NOT NULL,
+  refresh_token TEXT    NOT NULL,
+  expires_at    INTEGER NOT NULL,
+  refresh_expires_at INTEGER,
+  scope         TEXT,
+  union_id      TEXT,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_tokens_expires ON user_tokens(expires_at);
+
+-- =====================================================
 -- 初始化：插入默认 config 行
 -- =====================================================
 INSERT OR IGNORE INTO config (id, default_message_type, updated_at)

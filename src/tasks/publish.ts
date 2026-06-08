@@ -26,7 +26,7 @@ import { getSubDepartments } from '../dingtalk/contacts.ts';
 import { makeShortCode, buildShortUrl, buildQrR2Key } from '../links/shortener.ts';
 import { generateAndStoreQr, buildQrPublicUrl } from '../links/qrcode.ts';
 import { sendWorkNotification, buildPromotionMarkdown } from '../dingtalk/message.ts';
-import { addWorkrecord } from '../dingtalk/workrecord.ts';
+import { sendPersonalTodo } from '../dingtalk/workrecord.ts';
 import { safeJson } from '../utils/json.ts';
 
 export interface PublishResult {
@@ -165,30 +165,52 @@ export async function publishTask(env: Env, taskId: string): Promise<PublishResu
           errors.push({ userid: t.userid, error: r.errmsg });
         }
       } else if (task.message_type === 'todo') {
-        const r = await addWorkrecord(env, {
-          userid: t.userid,
-          title: task.title ?? '推广任务',
-          url: targetRow.short_url!,
-          formItemList: [
-            { title: '推广链接', content: targetRow.short_url ?? '' },
-            { title: '原始链接', content: task.original_url },
-          ],
-          sourceName: 'cf推广统计',
-        });
+        // 个人待办：优先用 OAuth 后的 user access_token 调新版 API
+        // 没授权的推广人：fallback 到工作通知（不阻塞任务发布）
+        const r = await sendPersonalTodo(env, t.userid, task.title ?? '推广任务',
+          `📱 推广素材：${targetRow.short_url ?? ''}\n🔗 原始链接：${task.original_url}\n\n${polished.friend_circle}`);
         if (r.errcode === 0) {
           await updateTarget(env.DB, t.id, {
             send_status: 'success',
             sent_at: Date.now(),
-            dingtalk_msg_id: r.record_id ?? null,
+            dingtalk_msg_id: r.taskId ?? null,
           });
           sentSuccess++;
         } else {
-          await updateTarget(env.DB, t.id, {
-            send_status: 'failed',
-            send_error: r.errmsg,
-          });
-          sentFailed++;
-          errors.push({ userid: t.userid, error: r.errmsg });
+          // fallback 到工作通知（如果 r 错误是因为没授权）
+          if (r.errmsg?.includes('未授权')) {
+            const md = buildPromotionMarkdown({
+              title: task.title ?? '推广任务',
+              shortUrl: targetRow.short_url!,
+              qrUrl: buildQrPublicUrl(env.SHORT_URL_BASE, targetRow.qr_r2_key!),
+              originalUrl: task.original_url,
+              originalContent: task.original_content ?? '',
+              copyFriendCircle: polished.friend_circle,
+              copyGroup: polished.group,
+              copyPrivate: polished.private,
+            });
+            const wn = await sendWorkNotification(env, [t.userid], {
+              title: task.title ?? '推广任务',
+              markdown: md,
+            });
+            if (wn.errcode === 0) {
+              await updateTarget(env.DB, t.id, {
+                send_status: 'success',
+                sent_at: Date.now(),
+                dingtalk_msg_id: String(wn.task_id ?? ''),
+                send_error: '(已降级为工作通知) ' + r.errmsg,
+              });
+              sentSuccess++;
+            } else {
+              await updateTarget(env.DB, t.id, { send_status: 'failed', send_error: wn.errmsg });
+              sentFailed++;
+              errors.push({ userid: t.userid, error: wn.errmsg });
+            }
+          } else {
+            await updateTarget(env.DB, t.id, { send_status: 'failed', send_error: r.errmsg });
+            sentFailed++;
+            errors.push({ userid: t.userid, error: r.errmsg });
+          }
         }
       }
     } catch (e) {

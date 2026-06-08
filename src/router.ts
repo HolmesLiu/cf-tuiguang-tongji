@@ -54,6 +54,11 @@ import {
   handleAgentListDepartments,
 } from './api/agent/users.ts';
 import { handleH5Landing } from './api/h5/landing.ts';
+import {
+  handleOAuthAuthorize,
+  handleOAuthCallback,
+  handleOAuthStatus,
+} from './api/oauth/callback.ts';
 
 type Handler = (ctx: Ctx) => Promise<Response> | Response;
 
@@ -78,10 +83,13 @@ function compileRoute(method: string, path: string, handler: Handler): Route {
 }
 
 const routes: Route[] = [
-  // ============ 短链中转 / 二维码 / H5 详情页 ============
+  // ============ 短链中转 / 二维码 / H5 详情页 / OAuth ============
   compileRoute('GET', '/s/:code', (ctx) => handleShortLink(ctx.env, ctx.params.code, ctx.request)),
   compileRoute('GET', '/qr/:key', (ctx) => handleServeQr(ctx.env, ctx.params.key)),
   compileRoute('GET', '/h5/p/:code', (ctx) => handleH5Landing(ctx.env, ctx.params.code, ctx.url.origin)),
+  compileRoute('POST', '/api/oauth/authorize', handleOAuthAuthorize),
+  compileRoute('GET', '/api/oauth/callback', handleOAuthCallback),
+  compileRoute('GET', '/api/oauth/status', handleOAuthStatus),
 
   // ============ 后台认证 ============
   compileRoute('POST', '/api/admin/login', (ctx) => handleAdminLogin(ctx.env, ctx.request)),
