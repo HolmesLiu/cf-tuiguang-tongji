@@ -1,13 +1,12 @@
 /**
  * 通讯录分批同步（核心逻辑）
+ *
  * - 启动：清空表 + 设状态 + 处理第一批
- * - 推进：从队列拉下一批部门（5 个），递归拉子部门 + 用户，写库
+ * - 推进：从队列拉下一批部门（3 个），递归拉子部门 + 用户，写库
  * - 终止：队列空 + 当前批完成 → status: 'done'
  *
- * 设计要点：
- * - BFS 队列持久化在 KV（contacts:sync:state）
- * - 单次 invocation 内只处理 BATCH_SIZE 个部门（控制 subrequest）
- * - 全量清空只在启动时执行（清空后逐批插入）
+ * 单 invocation 最多跑 2 批（subrequest 预算 40 < 50）
+ * 部门信息缓存到 state（避免每批 listDepartments）
  */
 
 import type { Env, DingtalkDeptListResponse, DingtalkUserListResponse, DingtalkDepartment, DingtalkUser } from '../types.ts';
@@ -17,15 +16,18 @@ import {
   bulkInsertUsers,
   clearDepartments,
   clearUsers,
-  listDepartments,
 } from '../db/queries.ts';
-import { getSyncState, setSyncState, INITIAL_STATE, BATCH_SIZE, SyncState } from './syncState.ts';
+import {
+  getSyncState,
+  setSyncState,
+  INITIAL_STATE,
+  BATCH_SIZE,
+  MAX_BATCHES_PER_INVOCATION,
+  SyncState,
+} from './syncState.ts';
 
 const PAGE_SIZE = 100;
-const USER_PAGES_PER_DEPT = 5;            // 每个部门用户最多 5 页（500 人）
-const BUDGET_PHASE_A = 20;                // 拉子部门 subrequest 预算
-const BUDGET_PHASE_B = 25;                // 拉用户 subrequest 预算
-const MAX_TOTAL = BUDGET_PHASE_A + BUDGET_PHASE_B;  // 45，留 5 给其他
+const USER_PAGES_PER_DEPT = 5;            // 每部门最多 5 页（500 人）防 subrequest 超
 
 // ==================== 启动 ====================
 
@@ -33,7 +35,7 @@ const MAX_TOTAL = BUDGET_PHASE_A + BUDGET_PHASE_B;  // 45，留 5 给其他
  * 启动一次"全量同步"
  * - 清空 departments / users 表
  * - 初始化 state（队列 = [1] 根部门）
- * - 立即跑一批（不超 subrequest 上限）
+ * - 立即跑一批
  */
 export async function startSync(env: Env): Promise<SyncState> {
   await clearDepartments(env.DB);
@@ -62,8 +64,8 @@ export async function startSync(env: Env): Promise<SyncState> {
  * 推进一步：处理 BATCH_SIZE 个部门
  *  - 从队列头拿出部门
  *  - listsub 拿子部门
- *  - listsub 拿这些子部门的用户
- *  - 全部入队 / 入库
+ *  - 写库（用 db.batch 合并，1 subrequest）
+ *  - 然后拉这些新部门的用户，写库（1 subrequest）
  */
 export async function processNextBatch(env: Env): Promise<SyncState> {
   const state = await getSyncState(env);
@@ -75,16 +77,18 @@ export async function processNextBatch(env: Env): Promise<SyncState> {
   const usersToWrite: DingtalkUser[] = [];
   const currentBatchDepts: number[] = [];
 
-  // 已存在的部门（用来构建部门路径）
-  const allDepts = await listDepartments(env.DB);
-  const deptById = new Map<number, DingtalkDepartment>(allDepts.map((d) => [d.dept_id, d]));
+  // 部门 Map（来自 state 缓存，避免查 D1）
+  const deptById = new Map<number, { name: string; parent_id: number | null; path: string }>();
+  for (const d of state.deptCache) {
+    deptById.set(d.dept_id, d);
+  }
 
   try {
     // ---------- 阶段 A: 拉本批部门的子部门 ----------
     while (
       state.queue.length > 0 &&
       currentBatchDepts.length < BATCH_SIZE &&
-      subrequestsUsed < BUDGET_PHASE_A
+      subrequestsUsed < 15  // 留 25 给用户拉取
     ) {
       const deptId = state.queue.shift()!;
       currentBatchDepts.push(deptId);
@@ -119,14 +123,25 @@ export async function processNextBatch(env: Env): Promise<SyncState> {
 
     // 构建本批新部门的 path
     for (const d of deptsToWrite) {
-      d.path = buildPathFromMap(d.dept_id, deptById);
-      deptById.set(d.dept_id, d);
+      d.path = buildPathFromMap(d.dept_id, d.parent_id, deptById);
+      // 缓存到 state
+      state.deptCache.push({
+        dept_id: d.dept_id,
+        name: d.name,
+        parent_id: d.parent_id,
+        path: d.path,
+      });
+      deptById.set(d.dept_id, {
+        name: d.name,
+        parent_id: d.parent_id,
+        path: d.path,
+      });
     }
     state.syncedDepts += deptsToWrite.length;
     state.currentBatchDepts = currentBatchDepts;
 
     // ---------- 阶段 B: 拉本批新发现部门的用户 ----------
-    let userBudget = BUDGET_PHASE_B;
+    let userBudget = 20;  // 留 5 给 batch dept/users
     for (const dept of deptsToWrite) {
       if (userBudget <= 0) break;
       let cursor = 0;
@@ -156,7 +171,7 @@ export async function processNextBatch(env: Env): Promise<SyncState> {
             mobile: u.mobile || null,
             avatar: u.avatar || null,
             dept_id: primaryDeptId,
-            dept_path: buildPathFromMap(primaryDeptId, deptById),
+            dept_path: buildPathFromMap(primaryDeptId, null, deptById),
             title: u.title ?? null,
             is_active: u.active ? 1 : 0,
             synced_at: 0,
@@ -168,12 +183,14 @@ export async function processNextBatch(env: Env): Promise<SyncState> {
     }
     state.syncedUsers += usersToWrite.length;
 
-    // ---------- 阶段 C: 写库 ----------
+    // ---------- 阶段 C: 写库（db.batch 合并 = 2 subrequest） ----------
     if (deptsToWrite.length > 0) {
       await bulkInsertDepartments(env.DB, deptsToWrite);
+      subrequestsUsed++;
     }
     if (usersToWrite.length > 0) {
       await bulkInsertUsers(env.DB, usersToWrite);
+      subrequestsUsed++;
     }
 
     // ---------- 更新状态 ----------
@@ -201,32 +218,19 @@ export async function processNextBatch(env: Env): Promise<SyncState> {
   }
 }
 
-// ==================== 重置 ====================
+// ==================== 连推：单次 invocation 内跑多批 ====================
 
 /**
- * 重置状态（调试用）
- */
-export async function resetSyncState(env: Env): Promise<void> {
-  await env.KV.delete('contacts:sync:state');
-}
-
-// ==================== 连推：单次 invocation 内跑尽量多批 ====================
-
-/**
- * 循环跑批直到完成 / 出错 / 超时
- * 用于纯手动同步模式：一次 /api/contacts/sync 请求能推进尽可能多批
- * （多批之后受 CF Worker wall time 30s 限制）
+ * 循环跑批直到完成 / 出错 / 达到批数上限
+ * 单 invocation 最多 2 批（subrequest 预算 ~40 < 50）
  */
 export async function runUntilDoneOrTimeout(env: Env, maxWallMs = 25_000): Promise<SyncState> {
   const t0 = Date.now();
   let state = await getSyncState(env);
   if (state.status !== 'pending') return state;
   let batches = 0;
-  while (state.status === 'pending') {
-    if (Date.now() - t0 > maxWallMs) {
-      console.log(`[sync] reached wall-time limit ${maxWallMs}ms, batches=${batches}`);
-      break;
-    }
+  while (state.status === 'pending' && batches < MAX_BATCHES_PER_INVOCATION) {
+    if (Date.now() - t0 > maxWallMs) break;
     state = await processNextBatch(env);
     if (state.status === 'error') break;
     batches++;
@@ -234,11 +238,18 @@ export async function runUntilDoneOrTimeout(env: Env, maxWallMs = 25_000): Promi
   return state;
 }
 
+// ==================== 重置 ====================
+
+export async function resetSyncState(env: Env): Promise<void> {
+  await env.KV.delete('contacts:sync:state');
+}
+
 // ==================== 辅助 ====================
 
 function buildPathFromMap(
   selfId: number,
-  byId: Map<number, DingtalkDepartment>
+  _parentHint: number | null,
+  byId: Map<number, { name: string; parent_id: number | null; path: string }>
 ): string {
   const path: string[] = [];
   let cur = byId.get(selfId);
